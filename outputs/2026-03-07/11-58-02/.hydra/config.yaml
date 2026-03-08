@@ -1,0 +1,39 @@
+basic:
+  seed: 42
+  gpu: 0
+  dataset: pretrain
+  path: results/
+  nb_workers: 1
+ds:
+  basic:
+    task: Feature
+    dataset: MFTP
+    split: false
+    pretrain_path: results/pretrain/fold${ds.train_params.fold}_batch${ds.train_params.batch}_epoch${ds.train_params.epoch}/best_model_state_dict.pt
+  loss_fn:
+    loss: NT_Xent
+  encoder:
+    vocab_size: 21
+    emb_dim: 32
+    d_ff: 128
+    d_k: 128
+    d_v: 128
+    n_heads: 2
+    n_layers: 2
+    max_len: 50
+  train_params:
+    fold: 1
+    batch: 64
+    epoch: 200
+    lr: 0.001
+    weight_decay: 0.0001
+    temperature: 0.1
+  model:
+    precet: 0.25
+    dropout: 0.2
+  r_savepath:
+    path: results/${ds.basic.dataset}/fold${ds.train_params.fold}_batch${ds.train_params.batch}_epoch${ds.train_params.epoch}
+optimizer:
+  name: Adam
+  lr: 0.0001
+  weight_decay: 1.0e-07

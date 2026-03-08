@@ -1,0 +1,6 @@
+seed    : 42
+gpu     : 0
+dataset : pretrain
+
+path    : results/
+nb_workers: 1
