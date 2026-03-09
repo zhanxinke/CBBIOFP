@@ -1,5 +1,0 @@
-basic:
-  gpu: 0
-  dataset: Feature
-save:
-  path: results/

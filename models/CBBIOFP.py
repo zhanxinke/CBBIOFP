@@ -36,42 +36,37 @@ class CBBIOMFP(nn.Module):
                                 nn.Linear(512, 128)).cuda()
         
     def forward(self, peptide):
-        '''
-        enc_inputs: [batch_size, src_len]
-        dec_inputs: [batch_size, tgt_len]
-        '''
-        # input + PE
-        enc_outputs = self.src_emb(peptide)  #[32,50]                                                                                                                                                                                                                                                                                                                           [batch_size, src_len, d_model]
-        enc_outputs = self.pos_emb(enc_outputs.transpose(0, 1)).transpose(0, 1)  # [batch_size, src_len, d_model]
+        enc_outputs = self.src_emb(peptide)
+        enc_outputs = self.pos_emb(enc_outputs.transpose(0, 1)).transpose(0, 1)
 
-        # Attention-Aware Masking
         _, mask_self_attn, _ = self.attention(peptide, enc_outputs)
         lenth = len(mask_self_attn)
         layer_sum = mask_self_attn[0]
         flag = 1
         while lenth != 1:
-            # 最小
             layer_sum = layer_sum + mask_self_attn[flag]
-            # 最大
-            # layer_sum = layer_sum + mask_slef_attn[flag1]
-            lenth = lenth - 1
+            flag += 1
+            lenth -= 1
 
         head_sum = layer_sum.sum(dim=1)
         mask = head_sum.sum(dim=1)
 
-        # 将相应权重的字符设为0，以掩盖
         mask_peptide = creat_mask_matrix(mask, peptide, self.precet)
 
-        enc_outputs_mask = self.src_emb(mask_peptide)  # [batch_size, src_len, d_model]
-        enc_outputs_mask = self.pos_emb(enc_outputs_mask.transpose(0, 1)).transpose(0, 1)  # [batch_size, src_len, d_model]
+        enc_outputs_mask = self.src_emb(mask_peptide)
+        enc_outputs_mask = self.pos_emb(enc_outputs_mask.transpose(0, 1)).transpose(0, 1)
 
-        enc_outputs, enc_self_attns, attn_score  = self.encoder(peptide, enc_outputs)
+        enc_outputs, enc_self_attns, attn_score = self.encoder(peptide, enc_outputs)
         enc_outputs_mask, enc_self_attns_mask, _ = self.trans_encoder(mask_peptide, enc_outputs_mask)
 
-        enc_outputs = torch.reshape(enc_outputs, (enc_outputs.shape[0], -1))
-        enc_outputs_mask = torch.reshape(enc_outputs_mask, (enc_outputs_mask.shape[0], -1))
+        h1 = torch.reshape(enc_outputs, (enc_outputs.shape[0], -1))
+        h2 = torch.reshape(enc_outputs_mask, (enc_outputs_mask.shape[0], -1))
 
-        return peptide, self.pre_head(enc_outputs), mask_peptide, self.pre_head(enc_outputs_mask), attn_score
+        z1 = self.pre_head(h1)
+        z2 = self.pre_head(h2)
+
+        return h1, z1, h2, z2, attn_score
+
 
 def creat_mask_matrix(mask, peptide, precet):
     """mask (batch_size, src_len) is matrix sumed

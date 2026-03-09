@@ -30,8 +30,8 @@ class Trainer:
         self.out_path = args.ds.r_savepath.path
         
         self.console.log('=> [1] Initial Models')
-        self.metric    = load_metric(args)
         self.loss_fn   = get_loss_fn(args)
+        
         self.pretrain_model     = CBBIOMFP(args).cuda()   
         para_mb = str(float(count_parameters_in_MB(self.pretrain_model)))
         self.console.log(f'[red]     => Supernet Parameters: {para_mb} MB')
@@ -56,10 +56,9 @@ class Trainer:
         self.console.log('=> [3] Initial Optimizer && Scheduler')
         
         self.optimizer = torch.optim.Adam(
-            params       = self.model.parameters(),
+            params       = self.pretrain_model.parameters(),
             lr           = args.optimizer.lr,
             weight_decay = args.optimizer.weight_decay)
-        
         
         self.scheduler = torch.optim.lr_scheduler.CyclicLR(
             self.optimizer, 
@@ -67,6 +66,7 @@ class Trainer:
             max_lr         = self.args.optimizer.lr * 10, 
             cycle_momentum = False,
             step_size_up   = len(self.train_dataset) // self.args.ds.train_params.batch)
+        
     
     def load_dataloader(self):
         if self.args.ds.basic.task == 'pretrain':
@@ -81,7 +81,8 @@ class Trainer:
                 batch_size  = self.args.ds.train_params.batch,
                 shuffle     = False,
                 num_workers = self.args.basic.nb_workers)
-            
+            return self.train_dataloader, self.val_dataloader
+        
         elif self.args.ds.basic.task == 'Feature':
             self.train_dataloader = torch.utils.data.DataLoader(
                 dataset     = self.train_dataset,
@@ -108,7 +109,7 @@ class Trainer:
                 shuffle     = False,
                 num_workers = self.args.basic.nb_workers)
             
-        return self.train_dataloader, self.test_dataloader
+            return self.train_dataloader, self.test_dataloader
         
         
     def run(self):
@@ -139,14 +140,14 @@ class Trainer:
             train_bar = tqdm(self.train_dataloader)
             for tem in train_bar:
                 peptide, _ = tem[0].cuda(), tem[1].cuda()
-                embedding, _, _, _, _ = self.pretrain_model(peptide)
-                feature_graph = torch.cat((feature_graph, torch.Tensor(embedding.to('cpu').data.numpy())), 0)
+                h1, z1, h2, z2, attn_score = self.pretrain_model(peptide)
+                feature_graph = torch.cat((feature_graph, torch.Tensor(h1.to('cpu').data.numpy())), 0)
 
             test_bar = tqdm(self.test_dataloader)
             for tem in test_bar:
                 peptide, _ = tem[0].cuda(), tem[1].cuda()
-                embedding, _, _, _, _ = self.pretrain_model(peptide)
-                feature_graph = torch.cat((feature_graph, torch.Tensor(embedding.to('cpu').data.numpy())), 0)
+                h1, z1, h2, z2, attn_score = self.pretrain_model(peptide)
+                feature_graph = torch.cat((feature_graph, torch.Tensor(h1.to('cpu').data.numpy())), 0)
             
             torch.save(feature_graph, f"{self.out_path}/train_feature_graph.pt")
             torch.save(feature_graph, f"{self.out_path}/test_feature_graph.pt")

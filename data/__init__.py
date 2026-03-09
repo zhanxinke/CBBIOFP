@@ -9,17 +9,10 @@ from utils.utils import *
 from data.MFTP import MFTPDataset
 from data.Pretrain import PretrainDataset
 
-def load_metric(args):
-    if args.ds.basic.dataset in ['MFTP', 'pretrain']:
-        return MAE
-    else:
-        raise Exception('Unknown dataset!')
-
 
 def get_loss_fn(args):
     if args.ds.basic.dataset in ['MFTP', 'pretrain']:
         loss_fn = CELoss()
-        
     else:
         raise Exception('Unknown dataset!')
     return loss_fn

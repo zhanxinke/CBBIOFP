@@ -1,6 +1,6 @@
 basic:
-  gpu     : 0
-  dataset : Feature
+  gpu     : 3
+  dataset : pretrain
 
 save:
   path    : results/

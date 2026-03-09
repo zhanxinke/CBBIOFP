@@ -1,5 +1,0 @@
-basic:
-  gpu: 3
-  dataset: pretrain
-save:
-  path: results/

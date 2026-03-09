@@ -28,19 +28,19 @@ def pretrain(self, epoch, net, data_loader, train_optimizer):
     with progress:
         for tem in data_loader:
             peptide, label = tem[0].cuda(), tem[1].cuda()
-            graph1, out_1, org2, out_2, attn_score = net(peptide)
+            h1, z1, h2, z2, attn_score = net(peptide)
 
             # ========= 计算 loss =========
             if self.args.ds.loss_fn.loss == 'NT_Xent':
                 criterion = NT_Xent(
-                    out_1.shape[0],
+                    z1.shape[0],
                     self.args.ds.train_params.temperature,
                     1
                 )
-                loss = criterion(out_1, out_2)
+                loss = criterion(z1, z2)
 
             elif self.args.ds.loss_fn.loss == 'MultiSupCon':
-                features = torch.stack([out_1, out_2], dim=1)
+                features = torch.stack([z1, z2], dim=1)
                 criterion = MultiSupConLoss()
                 loss = criterion(features, label)
 
@@ -94,19 +94,19 @@ def pretrain_val(self, epoch, net, data_loader):
         with torch.no_grad():
             for tem in data_loader:
                 peptide, label = tem[0].cuda(), tem[1].cuda()
-                graph1, out_1, org2, out_2, attn_score = net(peptide)
+                h1, z1, h2, z2, attn_score = net(peptide)
 
                 if self.args.ds.loss_fn.loss == 'NT_Xent':
                     criterion = NT_Xent(
-                        out_1.shape[0],
+                        z1.shape[0],
                         self.args.ds.train_params.temperature,
                         1
                     )
-                    loss = criterion(out_1, out_2)
+                    loss = criterion(z1, z2)
 
                 elif self.args.ds.loss_fn.loss == 'MultiSupCon':
                     criterion = MultiSupConLoss()
-                    features = torch.stack([out_1, out_2], dim=1)
+                    features = torch.stack([z1, z2], dim=1)
                     loss = criterion(features, label)
 
                 batch_size = peptide.size(0)

@@ -10,7 +10,3 @@ class CELoss(nn.Module):
     def forward(self, pred, label):
         return self.loss_fn(pred, label)
     
-def MAE(scores, targets):
-    MAE = F.l1_loss(scores, targets)
-    MAE = MAE.detach().item()
-    return MAE
