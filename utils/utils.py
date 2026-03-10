@@ -10,6 +10,13 @@ class CELoss(nn.Module):
     def forward(self, pred, label):
         return self.loss_fn(pred, label)
 
+class BCELoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.loss_fn = nn.BCEWithLogitsLoss()
+
+    def forward(self, pred, label):
+        return self.loss_fn(pred, label)
 
 class FocalDiceLoss(nn.Module):
     """Multi-label focal-dice loss"""

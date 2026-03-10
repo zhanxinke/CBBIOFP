@@ -6,13 +6,9 @@ import torch
 class Folder(data.Dataset):
 
     def __init__(self):
-        
-        sample = []
-
         train_feature = torch.load("/home/xinke/Projects/MultiFunctional_Peptides/MFTPCBB/results/MFTP/fold1_batch64_epoch200/train_feature_graph.pt")
         test_feature = torch.load("/home/xinke/Projects/MultiFunctional_Peptides/MFTPCBB/results/MFTP/fold1_batch64_epoch200/test_feature_graph.pt")
 
-        
         self.train_seq = train_feature['peptide']
         self.train_data = train_feature['feature']
         self.train_label = train_feature['label']
@@ -27,7 +23,6 @@ class Dataset(data.Dataset):
         self.seq = seq
         self.data = data
         self.label = label
-
 
     def __len__(self):
         length = len(self.label)

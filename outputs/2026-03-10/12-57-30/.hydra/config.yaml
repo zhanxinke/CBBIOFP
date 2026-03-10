@@ -1,0 +1,5 @@
+basic:
+  gpu: 0
+  dataset: classification
+save:
+  path: results/

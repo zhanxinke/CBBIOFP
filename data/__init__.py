@@ -14,7 +14,8 @@ def get_loss_fn(args):
     if args.ds.basic.dataset in ['MFTP', 'pretrain']:
         loss_fn = CELoss()
     elif args.ds.basic.dataset in ['classification']:
-        loss_fn = FocalDiceLoss()
+        # loss_fn = FocalDiceLoss()
+        loss_fn = BCELoss()
     else:
         raise Exception('Unknown dataset!')
     return loss_fn
