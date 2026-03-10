@@ -1,4 +1,4 @@
 defaults:
     - basic     : config
-    - ds        : pretrain
+    - ds        : classification
     - optimizer : Adam

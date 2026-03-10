@@ -7,6 +7,8 @@ from rich.console import Console
 from omegaconf import OmegaConf
 
 from data import *
+from data.dataloader import DataLoader
+
 from models import *
 from models.CBBIOFP import *
 from models.CBBIOFPT import *
@@ -15,6 +17,9 @@ from models.nx_xent import NT_Xent
 from models.MultiSupCon import MultiSupConLoss
 from utils.parameter_out import parameter_out
 from models.pretrain import *
+from utils.evaluation import *
+
+from src import folders
 
 class Trainer:
     def __init__(self, args):
@@ -31,131 +36,95 @@ class Trainer:
         self.console.log('=>  Initial Models')
         self.loss_fn   = get_loss_fn(args)
         self.model     = CBBIOMFPT(args).cuda()
-        
+
         para_mb = str(float(count_parameters_in_MB(self.model)))
         self.console.log(f'[red]     => Supernet Parameters: {para_mb} MB')
 
         self.console.log('=>  Preparing Dataset')
-        if args.ds.basic.task == 'classification':
-            self.train_dataset, self.test_dataset = load_data(args)
-            self.console.log(f'train_data: {self.train_dataset[0][0]}')
-            self.console.log(f'test_data: {self.test_dataset[0][0]}')
-            self.optimizer = torch.optim.Adam(
-            params       = self.model.parameters(),
-            lr           = args.optimizer.lr,
-            weight_decay = args.optimizer.weight_decay)
-
-
+        # if args.ds.basic.task == 'classification':
+        #     self.train_dataset, self.test_dataset = load_data(args)
+        #     self.console.log(f'[red]    => train_data: {self.train_dataset[0][0]}')
+        #     self.console.log(f'[red]    => test_data: {self.test_dataset[0][0]}')
+        
         self.train_dataloader, self.test_dataloader = self.load_dataloader()
-        
-        self.console.log('=>  Initial Optimizer && Scheduler')
-        
         self.optimizer = torch.optim.Adam(
-            params       = self.model.parameters(),
-            lr           = args.optimizer.lr,
-            weight_decay = args.optimizer.weight_decay)
+                    params       = self.model.parameters(),
+                    lr           = args.optimizer.lr,
+                    weight_decay = args.optimizer.weight_decay)
+        self.console.log('=>  Initial Optimizer && Scheduler')
         
         self.scheduler = torch.optim.lr_scheduler.CyclicLR(
             self.optimizer, 
             base_lr        = self.args.optimizer.lr, 
             max_lr         = self.args.optimizer.lr * 10, 
             cycle_momentum = False,
-            step_size_up   = len(self.train_dataset) // self.args.ds.train_params.batch)
-    
+            step_size_up   = len(self.train_dataloader) // self.args.ds.train_params.batch)
+        # self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, 20, gamma=0.9, last_epoch=-1)
+        
     def load_dataloader(self):
-        if self.args.ds.basic.task == 'pretrain':
-            self.train_dataloader = torch.utils.data.DataLoader(
-                dataset     = self.train_dataset,
-                batch_size  = self.args.ds.train_params.batch,
-                shuffle     = True,
-                num_workers = self.args.basic.nb_workers)
-            
-            self.val_dataloader = torch.utils.data.DataLoader(
-                dataset     = self.val_dataset,
-                batch_size  = self.args.ds.train_params.batch,
-                shuffle     = False,
-                num_workers = self.args.basic.nb_workers)
-            
-        elif self.args.ds.basic.task == 'Feature':
-            self.train_dataloader = torch.utils.data.DataLoader(
-                dataset     = self.train_dataset,
-                batch_size  = self.args.ds.train_params.batch,
-                shuffle     = False,
-                num_workers = self.args.basic.nb_workers)
-            
-            self.test_dataloader = torch.utils.data.DataLoader(
-                dataset     = self.test_dataset,
-                batch_size  = self.args.ds.train_params.batch,
-                shuffle     = False,
-                num_workers = self.args.basic.nb_workers)
-            
-        elif self.args.ds.basic.task == 'classification':
-            self.train_dataloader = torch.utils.data.DataLoader(
-                dataset     = self.train_dataset,
-                batch_size  = self.args.ds.train_params.batch,
-                shuffle     = True,
-                num_workers = self.args.basic.nb_workers)
-            
-            self.test_dataloader = torch.utils.data.DataLoader(
-                dataset     = self.test_dataset,
-                batch_size  = self.args.ds.train_params.batch,
-                shuffle     = False,
-                num_workers = self.args.basic.nb_workers)
-            
-        return self.train_dataloader, self.test_dataloader
-        
-        
+        dataset = folders.Folder()
+        tr_data = folders.Dataset(dataset.train_seq, dataset.train_data, dataset.train_label)
+        te_data = folders.Dataset(dataset.test_seq, dataset.test_data, dataset.test_label)
+        train_data = DataLoader(batch_size=64, istrain=True).get_data(tr_data)
+        test_data = DataLoader(batch_size=64, istrain=True).get_data(te_data)
+        return train_data, test_data
+
     def run(self):
-        if self.args.ds.basic.task == 'pretrain':
-            best_val = float("inf")
-            with open(f"{self.out_path}/loss_pretrain.csv", "w") as f:
-                f.write("epoch,train_loss,val_loss\n")
-            
-            for epoch in range(self.args.ds.train_params.epoch):
-                train_avg_loss = pretrain(self, epoch, self.pretrain_model, self.train_dataloader, self.optimizer)
-                val_avg_loss   = pretrain_val(self, epoch, self.pretrain_model, self.val_dataloader)
-                # save best on val
-                if val_avg_loss < best_val - 1e-6:
-                    best_val = val_avg_loss
-                    torch.save(self.pretrain_model.state_dict(), f'{self.out_path}/best_model_state_dict.pt')
-                    torch.save(self.pretrain_model, f'{self.out_path}/best_model.pt')
-                    
-                with open(f"{self.out_path}/loss_pretrain.csv", "a") as f:
-                        f.write(f"{epoch},{train_avg_loss},{val_avg_loss}\n")    
-                        
-            self.console.log(f'[red]    => Pretrain Complete')
-            
+        loss_lst = []
 
-        elif self.args.ds.basic.task == 'Feature':
-            self.pretrain_model.load_state_dict(torch.load(f'{self.args.ds.basic.pretrain_path}'))
-            self.pretrain_model.eval()
-            feature_graph = torch.Tensor()
-            train_bar = tqdm(self.train_dataloader)
-            for tem in train_bar:
-                peptide, _ = tem[0].cuda(), tem[1].cuda()
-                embedding, _, _, _, _ = self.pretrain_model(peptide)
-                feature_graph = torch.cat((feature_graph, torch.Tensor(embedding.to('cpu').data.numpy())), 0)
+        for epoch in range(self.args.ds.train_params.epoch):
 
-            test_bar = tqdm(self.test_dataloader)
-            for tem in test_bar:
-                peptide, _ = tem[0].cuda(), tem[1].cuda()
-                embedding, _, _, _, _ = self.pretrain_model(peptide)
-                feature_graph = torch.cat((feature_graph, torch.Tensor(embedding.to('cpu').data.numpy())), 0)
-            
-            torch.save(feature_graph, f"{self.out_path}/train_feature_graph.pt")
-            torch.save(feature_graph, f"{self.out_path}/test_feature_graph.pt")
-            self.console.log(f'train_feature_graph: {feature_graph.shape}')
-            self.console.log(f'test_feature_graph: {feature_graph.shape}')
-            self.console.log(f'train_feature_graph: {feature_graph[0]}')
-            self.console.log(f'test_feature_graph: {feature_graph[0]}')
-            
-            self.console.log(f'[red]    => Feature Extract Complete')
-        
-        elif self.args.ds.basic.task == 'classification':
-            self.pretrain_model.load_state_dict(torch.load(f'{self.args.ds.basic.pretrain_path}'))
-            
-            self.console.log(f'[red]    => Classification Complete')
+            # ================= train =================
+            self.model.train()
+            loss_sum = 0
 
+            for i, (seq, data, label) in enumerate(self.train_dataloader):
+                seq = seq.cuda()
+                data = data.cuda()
+                label = label.cuda().float()
+
+                self.optimizer.zero_grad()
+                output = self.model(data)
+
+                loss = self.loss_fn(output, label)
+                loss.backward()
+                self.optimizer.step()
+                self.scheduler.step()
+
+                loss_sum += loss.item()
+
+            train_loss = loss_sum / (i + 1)
+            self.console.log(f'[red]    => Epoch {epoch} Train Loss: {train_loss:.6f}')
+            loss_lst.append(train_loss)
+
+            # ================= test =================
+            self.model.eval()
+            preds = []
+            reals = []
+
+            with torch.no_grad():
+                for i, (seq, data, label) in enumerate(self.test_dataloader):
+                    seq = seq.cuda()
+                    data = data.cuda()
+                    label = label.cuda().float()
+
+                    output = self.model(data)
+                    prob = torch.sigmoid(output)
+
+                    preds.append(prob.cpu())
+                    reals.append(label.cpu())
+
+            preds = torch.cat(preds, dim=0).numpy()
+            reals = torch.cat(reals, dim=0).numpy()
+
+            score = evaluate(preds, reals)
+
+            self.console.log(f'[red]    => Epoch {epoch} Test Performance')
+            self.console.log(f'[red]    => aiming: {score[0]:.3f}')
+            self.console.log(f'[red]    => coverage: {score[1]:.3f}')
+            self.console.log(f'[red]    => accuracy: {score[2]:.3f}')
+            self.console.log(f'[red]    => absolute_true: {score[3]:.3f}')
+            self.console.log(f'[red]    => absolute_false: {score[4]:.3f}\n')
 
 @hydra.main(config_path = 'config', config_name = 'defaults', version_base=None)
 def app(args):

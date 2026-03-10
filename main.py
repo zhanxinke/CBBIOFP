@@ -50,15 +50,15 @@ class Trainer:
             self.train_dataset, self.test_dataset = load_data(args)
             self.console.log(f'train_data: {self.train_dataset[0][0]}')
             self.console.log(f'train_label: {self.train_dataset[0][1]}')
-        
+            self.optimizer = torch.optim.Adam(
+                params       = self.pretrain_model.parameters(),
+                lr           = args.optimizer.lr,
+                weight_decay = args.optimizer.weight_decay)
+            
+            
         self.train_dataloader, self.test_dataloader = self.load_dataloader()
         
         self.console.log('=> [3] Initial Optimizer && Scheduler')
-        
-        self.optimizer = torch.optim.Adam(
-            params       = self.pretrain_model.parameters(),
-            lr           = args.optimizer.lr,
-            weight_decay = args.optimizer.weight_decay)
         
         self.scheduler = torch.optim.lr_scheduler.CyclicLR(
             self.optimizer, 
@@ -95,6 +95,8 @@ class Trainer:
                 batch_size  = self.args.ds.train_params.batch,
                 shuffle     = False,
                 num_workers = self.args.basic.nb_workers)
+            
+            return self.train_dataloader, self.test_dataloader
             
         elif self.args.ds.basic.task == 'classification':
             self.train_dataloader = torch.utils.data.DataLoader(
@@ -136,26 +138,58 @@ class Trainer:
         elif self.args.ds.basic.task == 'Feature':
             self.pretrain_model.load_state_dict(torch.load(f'{self.args.ds.basic.pretrain_path}'))
             self.pretrain_model.eval()
-            feature_graph = torch.Tensor()
+            
+            all_peptide = []
+            all_label = []
+            all_feature = []
+            
             train_bar = tqdm(self.train_dataloader)
             for tem in train_bar:
-                peptide, _ = tem[0].cuda(), tem[1].cuda()
+                peptide, label = tem[0].cuda(), tem[1].cuda()
                 h1, z1, h2, z2, attn_score = self.pretrain_model(peptide)
-                feature_graph = torch.cat((feature_graph, torch.Tensor(h1.to('cpu').data.numpy())), 0)
+                all_peptide.append(peptide.cpu())
+                all_label.append(label.cpu())
+                all_feature.append(h1.cpu())
 
+            # 合并
+            all_peptide = torch.cat(all_peptide, dim=0)
+            all_label = torch.cat(all_label, dim=0)
+            all_feature = torch.cat(all_feature, dim=0)
+            # 保存
+            torch.save(
+                {
+                    "peptide": all_peptide,
+                    "label": all_label,
+                    "feature": all_feature
+                },
+                f"{self.out_path}/train_feature_graph.pt"
+            )
+            
+            all_peptide = []
+            all_label = []
+            all_feature = []
             test_bar = tqdm(self.test_dataloader)
             for tem in test_bar:
-                peptide, _ = tem[0].cuda(), tem[1].cuda()
+                peptide, label = tem[0].cuda(), tem[1].cuda()
                 h1, z1, h2, z2, attn_score = self.pretrain_model(peptide)
-                feature_graph = torch.cat((feature_graph, torch.Tensor(h1.to('cpu').data.numpy())), 0)
-            
-            torch.save(feature_graph, f"{self.out_path}/train_feature_graph.pt")
-            torch.save(feature_graph, f"{self.out_path}/test_feature_graph.pt")
-            self.console.log(f'train_feature_graph: {feature_graph.shape}')
-            self.console.log(f'test_feature_graph: {feature_graph.shape}')
-            self.console.log(f'train_feature_graph: {feature_graph[0]}')
-            self.console.log(f'test_feature_graph: {feature_graph[0]}')
-            
+                all_peptide.append(peptide.cpu())
+                all_label.append(label.cpu())
+                all_feature.append(h1.cpu())
+
+            # 合并
+            all_peptide = torch.cat(all_peptide, dim=0)
+            all_label = torch.cat(all_label, dim=0)
+            all_feature = torch.cat(all_feature, dim=0)
+            # 保存
+            torch.save(
+                {
+                    "peptide": all_peptide,
+                    "label": all_label,
+                    "feature": all_feature
+                },
+                f"{self.out_path}/test_feature_graph.pt"
+            )
+    
             self.console.log(f'[red]    => Feature Extract Complete')
         
         elif self.args.ds.basic.task == 'classification':

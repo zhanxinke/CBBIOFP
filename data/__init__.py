@@ -13,6 +13,8 @@ from data.Pretrain import PretrainDataset
 def get_loss_fn(args):
     if args.ds.basic.dataset in ['MFTP', 'pretrain']:
         loss_fn = CELoss()
+    elif args.ds.basic.dataset in ['classification']:
+        loss_fn = FocalDiceLoss()
     else:
         raise Exception('Unknown dataset!')
     return loss_fn
@@ -60,3 +62,23 @@ def create_dir(path):
     if not os.path.exists(path):
         os.makedirs(path)
     return path
+
+from typing import Union
+from pathlib import Path
+
+PathLike = Union[str, Path]
+
+def contacts_from_trrosetta(filename: PathLike, distance_threshold: float = 8.0):
+    fam_data = np.load(filename)
+    dist = fam_data["dist6d"]
+    nat_contacts = dist * ((dist > 0) & (dist < distance_threshold))
+    return nat_contacts
+
+def read_contacts(filename: PathLike, **kwargs) -> np.ndarray:
+    filename = Path(filename)
+    if filename.suffix == ".npz":
+        return contacts_from_trrosetta(filename, **kwargs)
+    else:
+        raise ValueError(
+            f"Cannot read file of type {filename.suffix}, must be one of (.cf, .pdb, .npz)"
+        )

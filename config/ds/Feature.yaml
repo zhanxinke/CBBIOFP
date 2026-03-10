@@ -2,7 +2,7 @@ basic:
   task    : Feature
   dataset : MFTP
   split   : False
-  pretrain_path: 'results/pretrain/fold1_batch128_epoch200/best_model_state_dict.pt'
+  pretrain_path: 'results/pretrain/fold1_batch128_epoch100/best_model_state_dict.pt'
 
 
 loss_fn:
